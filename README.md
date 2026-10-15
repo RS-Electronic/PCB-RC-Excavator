@@ -37,7 +37,7 @@ This upgrade completely eliminates the need for the MCP23017, increases motor pe
 
 Developing, wiring, and coding this dual-MCU system took a significant amount of time, testing, and reverse engineering. If this upgrade saves you money on expensive chips or makes your RC excavator build experience better, I would highly appreciate a small tip!
 
-[![Support me on Ko-fi](https://shields.io)](HIER_DEINEN_KO_FI_LINK_EINFÜGEN)
+[![Support me on Ko-fi](https://shields.io)](https://ko-fi.com/rselectronic)
 
 *(Please replace `(https://ko-fi.com/rselectronic)` with your actual Ko-fi URL in the markdown file!)*
 
