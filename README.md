@@ -1,10 +1,10 @@
 # DIY RC Excavator - ESP32-S3 Upgrade (MCP23017 Elimination)
 
-This project is a highly optimized remix of the brilliant [DIY RC Excavator by ProfessorBoots]([https://printables.com](https://www.printables.com/model/833291-diy-rc-excavator)). 
+This project is a highly optimized remix of the brilliant [DIY RC Excavator by ProfessorBoots](https://printables.com). 
 
 While the original design is fantastic, it relies on the **MCP23017** port expander to handle the large number of motors. In many regions, this chip has become hard to find or extremely expensive. Furthermore, driving multiple motors smoothly via I2C can hit performance bottlenecks.
 
-This upgrade completely eliminates the need for the MCP23017, increases motor performance, and reduces total build costs.
+This upgrade completely eliminates the need for the MCP23017, increases motor performance, and reduces total build costs by utilizing a dual-MCU setup.
 
 ---
 
@@ -16,32 +16,39 @@ This upgrade completely eliminates the need for the MCP23017, increases motor pe
 
 ---
 
+## 📂 Repository Content & Files
+
+Instead of a scattered folder structure, all necessary project files are included directly in this repository:
+
+* 📄 **`RC Excavator_DE_EN.pdf`** – Complete wiring, control schematic, and documentation (in German & English).
+* 📜 **`Mini_Excavator_Esp1.1.ino`** – Firmware for the primary ESP32 (Receiver / Main Logic).
+* 📜 **`Mini_Excavator_Esp2.1.ino`** – Firmware for the ESP32-S3 Super Mini (PWM / Motor Coprocessor).
+* 📦 **`PCB-RC-Excavator-main.zip`** – Complete Gerber files to manufacture your own custom PCB for this dual-ESP32 setup.
+
+### 📐 3D Printable Files (STLs)
+The modified 3D files to fit the extra electronics can be found directly on the official Printables Remix page:
+🔗 **[Printables Remix - DIY RC Excavator](https://printables.com/remixes)**
+
+---
+
 ## 🛠️ Hardware Requirements
 
 * 1x ESP32 Dev Board (Main Controller)
 * 1x ESP32-S3 Super Mini (Motor Coprocessor)
-* 4x Red DRV8833 Motor Driver Modules  
-
----
-
-## 📂 Repository Structure
-
-* `/Firmware_Main` - Code for the primary ESP32 (Receiver / Logic)
-* `/Firmware_Coprocessor` - Code for the ESP32-S3 Super Mini (PWM / Motor Control)
-* `/Schematics` - Wiring diagrams for the dual-ESP32 setup and DRV8833 drivers
-* `/STLs` - Modified 3D printable files for fitting the extra electronics
+* Red DRV8833 Motor Driver Modules
+* 9V Battery / Power Source Setup
+* Custom PCB (using the provided Gerber ZIP)
 
 ---
 
 ## ☕ Support this Project
 
-Developing, wiring, and coding this dual-MCU system took a significant amount of time, testing, and reverse engineering. If this upgrade saves you money on expensive chips or makes your RC excavator build experience better, I would highly appreciate a small tip!
+Developing the dual-MCU communication, designing the custom PCB, and fine-tuning the 9V power delivery took a significant amount of time, testing, and reverse engineering. If this upgrade saves you money on expensive chips or makes your RC excavator build experience better, I would highly appreciate a small tip!
 
 [![Support me on Ko-fi](https://shields.io)](https://ko-fi.com/rselectronic)
-
-*(Please replace `(https://ko-fi.com/rselectronic)` with your actual Ko-fi URL in the markdown file!)*
 
 ---
 
 ## License & Credits
-Original Concept by Proffboots. This modification is shared for community improvement. Check the respective code folders for licensing details.
+Original Concept by ProfessorBoots. This modification is shared for community improvement.
+
