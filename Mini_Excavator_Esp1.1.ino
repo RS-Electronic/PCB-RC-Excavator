@@ -1,22 +1,26 @@
 // ESP1_1-24_Gamepad_Master.txt
 // ESP32 #1 (Classic DevKit) - Gamepad Master für Bagger 1:24
-// Steuert: Pivot, MainBoom, Thumb, AuxAttach direkt über DRV8833
-// Servos: clawServo, auxServo
-// Licht: cabLights, auxLights
-// Tracks, Dipper, TiltAttach werden per Serial an ESP32-S3 (Motor-Slave) gesendet.
+// FW_VERSION: ESP32.1.V08
 //
 // Tastenbelegung PS4 (Bluepad32-Mapping):
 //   Kreuz   = ctl->a()  -> X-Doppelklick = Moduswechsel
 //   Kreis   = ctl->b()  -> frei
-//   Quadrat = ctl->x()  -> Thumb vorwärts
-//   Dreieck = ctl->y()  -> Thumb rückwärts
-//   L1/R1   -> Tracks vorwärts (Vollgas)
-//   L2/R2   -> Schub-Schild
+//   Quadrat = ctl->x()  -> FREI
+//   Dreieck = ctl->y()  -> FREI
+//   L1/R1   -> Schub-Schild: Kick 95% (0.08s) -> Rampe 70%..100% in 2s
+//   L2/R2   -> Thumb:        Rampe 65%..100% in 2s (KEIN Kick)
 //   D-Pad   -> clawServo (up/down), auxServo (left/right)
+//
+// Modi:
+//   NORMAL:        rechter Stick Y = MainBoom, rechter Stick X = TiltAttach
+//   JOYSTICK-TRACK: rechter Stick = Ketten (Panzersteuerung), MainBoom PAUSIERT
 
 #include <Arduino.h>
 #include <ESP32Servo.h>
 #include <Bluepad32.h>
+
+// ===== VERSION =====
+#define FW_VERSION "ESP32.1.V08"
 
 ControllerPtr myControllers[BP32_MAX_GAMEPADS];
 
@@ -32,10 +36,10 @@ ControllerPtr myControllers[BP32_MAX_GAMEPADS];
 #define mainBoom0    16  // MainBoom DRV1-B IN1 Hauptausleger; ctl->axisRY() down
 #define mainBoom1    17  // MainBoom DRV1-B IN2 Hauptausleger; ctl->axisRY() up
 
-#define thumb0       4   // Thumb DRV2-A IN1 Baggerdaumen, BUTTON_X (Quadrat)
-#define thumb1       2   // Thumb DRV2-A IN2 Baggerdaumen, BUTTON_Y (Dreieck)
-#define auxAttach0   25  // AuxAttach DRV2-B IN1 Schub-Schild, BUTTON_SHOULDER_L2
-#define auxAttach1   26  // AuxAttach DRV2-B IN2 Schub-Schild, BUTTON_SHOULDER_R2
+#define thumb0       4   // Thumb DRV2-A IN1 Baggerdaumen, BUTTON_SHOULDER_L2
+#define thumb1       2   // Thumb DRV2-A IN2 Baggerdaumen, BUTTON_SHOULDER_R2
+#define auxAttach0   25  // AuxAttach DRV2-B IN1 Schub-Schild, BUTTON_SHOULDER_L1
+#define auxAttach1   26  // AuxAttach DRV2-B IN2 Schub-Schild, BUTTON_SHOULDER_R1
 
 // --- PWM-Kanäle (LEDC) - Kanäle 8-15 ---
 #define PWM_FREQ     20000
@@ -51,6 +55,17 @@ ControllerPtr myControllers[BP32_MAX_GAMEPADS];
 
 #define ANALOG_DEADZONE 30
 #define AXIS_MAX 512
+
+// --- Rampen-Parameter ---
+// Thumb: nur Rampe, kein Kick
+#define RAMP_START_PWM_THUMB  166   // 65% - Thumb Rampe Start
+// Schub-Schild: Kick + Rampe
+#define KICK_PWM_AUX          242   // 95% - Kick fuer Schub-Schild
+#define KICK_DURATION_AUX_MS  80    // 0.08 s Kick
+#define RAMP_START_PWM_AUX    179   // 70% - Schub-Schild Rampe Start (nach Kick)
+// Gemeinsam
+#define RAMP_END_PWM          255   // 100%
+#define RAMP_DURATION_MS      2000  // 2 s Rampe
 
 // D-Pad Bitmasken (Bluepad32)
 #define DPAD_UP    0x01
@@ -83,6 +98,16 @@ bool moveAuxServoDown = false;
 bool joyTrackMode = false;
 bool lastModeBtn = false;
 uint32_t lastModePressTime = 0;
+
+// --- Rampen-Status (Thumb) ---
+uint32_t thumbRampStart = 0;
+bool     thumbRampActive = false;
+int      thumbDir = 0;
+
+// --- Rampen-Status (AuxAttach) ---
+uint32_t auxRampStart = 0;
+bool     auxRampActive = false;
+int      auxDir = 0;
 
 // --- Änderungs-Erkennung für Serial-Kommandos ---
 int lastDipperCmd    = -1;
@@ -151,6 +176,29 @@ int axisToPwmRaw(int axisValue) {
   return pwm;
 }
 
+// Rampe mit optionalem Kick:
+//   kickDurationMs == 0  -> kein Kick, Rampe sofort ab rampStartPwm
+//   kickDurationMs  > 0  -> Kick auf kickPwm fuer kickDurationMs,
+//                           dann Rampe von rampStartPwm bis RAMP_END_PWM
+int computeRampPwm(uint32_t rampStart, uint16_t kickDurationMs, int kickPwm, int rampStartPwm) {
+  uint32_t elapsed = millis() - rampStart;
+
+  // Phase 1: Kick (optional)
+  if (kickDurationMs > 0 && elapsed < kickDurationMs) {
+    return kickPwm;
+  }
+
+  // Phase 2: Rampe
+  uint32_t rampElapsed = (kickDurationMs > 0) ? (elapsed - kickDurationMs) : elapsed;
+  if (rampElapsed >= RAMP_DURATION_MS) return RAMP_END_PWM;
+
+  long span = (long)RAMP_END_PWM - (long)rampStartPwm;
+  long pwm = (long)rampStartPwm + (span * (long)rampElapsed) / (long)RAMP_DURATION_MS;
+  if (pwm > RAMP_END_PWM) pwm = RAMP_END_PWM;
+  if (pwm < rampStartPwm) pwm = rampStartPwm;
+  return (int)pwm;
+}
+
 void setMotor(int chFwd, int chRev, int axisValue) {
   int pwm = axisToPwm(axisValue);
   if (pwm == 0) {
@@ -173,35 +221,79 @@ void processBoom(int axisRYValue) {
   setMotor(CH_BOOM0, CH_BOOM1, axisRYValue);
 }
 
+void stopBoom() {
+  ledcWrite(CH_BOOM0, 0);
+  ledcWrite(CH_BOOM1, 0);
+}
+
 void processThumbAndAuxAttach(ControllerPtr ctl) {
-  // Thumb: Quadrat (ctl->x()) -> thumb0, Dreieck (ctl->y()) -> thumb1
-  if (ctl->x()) {
-    ledcWrite(CH_THUMB0, 255);
+  // ---------- Thumb via L2 / R2 (nur Rampe, kein Kick) ----------
+  bool l2 = ctl->l2();
+  bool r2 = ctl->r2();
+  int newThumbDir = 0;
+  if (l2 && !r2) newThumbDir =  1;
+  if (r2 && !l2) newThumbDir = -1;
+
+  if (newThumbDir != thumbDir) {
+    thumbDir = newThumbDir;
+    if (thumbDir != 0) {
+      thumbRampStart = millis();
+      thumbRampActive = true;
+    } else {
+      thumbRampActive = false;
+    }
+  }
+
+  int thumbPwm = thumbRampActive
+               ? computeRampPwm(thumbRampStart, 0, 0, RAMP_START_PWM_THUMB)
+               : 0;
+
+  if (thumbPwm > 0 && thumbDir == 1) {
+    ledcWrite(CH_THUMB0, thumbPwm);
     ledcWrite(CH_THUMB1, 0);
-  } else if (ctl->y()) {
+  } else if (thumbPwm > 0 && thumbDir == -1) {
     ledcWrite(CH_THUMB0, 0);
-    ledcWrite(CH_THUMB1, 255);
+    ledcWrite(CH_THUMB1, thumbPwm);
   } else {
     ledcWrite(CH_THUMB0, 0);
     ledcWrite(CH_THUMB1, 0);
   }
 
-  // AuxAttach: L2 -> auxAttach0, R2 -> auxAttach1
-  if (ctl->l2()) {
-    ledcWrite(CH_AUXA0, 255);
+  // ---------- AuxAttach via L1 / R1 (Kick + Rampe) ----------
+  bool l1 = ctl->l1();
+  bool r1 = ctl->r1();
+  int newAuxDir = 0;
+  if (l1 && !r1) newAuxDir =  1;
+  if (r1 && !l1) newAuxDir = -1;
+
+  if (newAuxDir != auxDir) {
+    auxDir = newAuxDir;
+    if (auxDir != 0) {
+      auxRampStart = millis();
+      auxRampActive = true;
+    } else {
+      auxRampActive = false;
+    }
+  }
+
+  int auxPwm = auxRampActive
+             ? computeRampPwm(auxRampStart, KICK_DURATION_AUX_MS, KICK_PWM_AUX, RAMP_START_PWM_AUX)
+             : 0;
+
+  if (auxPwm > 0 && auxDir == 1) {
+    ledcWrite(CH_AUXA0, auxPwm);
     ledcWrite(CH_AUXA1, 0);
-  } else if (ctl->r2()) {
+  } else if (auxPwm > 0 && auxDir == -1) {
     ledcWrite(CH_AUXA0, 0);
-    ledcWrite(CH_AUXA1, 255);
+    ledcWrite(CH_AUXA1, auxPwm);
   } else {
     ledcWrite(CH_AUXA0, 0);
     ledcWrite(CH_AUXA1, 0);
   }
 }
 
-// --- Doppelklick-Erkennung: Kreuz-Taste (ctl->a()) ---
 void checkModeToggle(ControllerPtr ctl) {
-  bool btnNow = ctl->a();   // Kreuz
+  bool btnNow = ctl->a();
   if (btnNow && !lastModeBtn) {
     uint32_t now = millis();
     if ((now - lastModePressTime) < DOUBLE_CLICK_MS && lastModePressTime != 0) {
@@ -215,7 +307,6 @@ void checkModeToggle(ControllerPtr ctl) {
   lastModeBtn = btnNow;
 }
 
-// --- ESP2 via Serial: Dipper ---
 void sendDipper(int axisYValue) {
   int a = abs(axisYValue);
   int cmd, speed;
@@ -236,7 +327,6 @@ void sendDipper(int axisYValue) {
   }
 }
 
-// --- ESP2 via Serial: TiltAttach ---
 void sendTiltAttach(int axisRXValue) {
   int a = abs(axisRXValue);
   int cmd, speed;
@@ -257,7 +347,6 @@ void sendTiltAttach(int axisRXValue) {
   }
 }
 
-// --- ESP2 via Serial: einzelne Track-Seite ---
 void sendTrackSide(int cmdFwd, int cmdBack, int cmdStop, int speedSigned,
                    int &lastCmd, int &lastSpeed) {
   int cmd, speed;
@@ -277,15 +366,6 @@ void sendTrackSide(int cmdFwd, int cmdBack, int cmdStop, int speedSigned,
   }
 }
 
-// --- Tracks im Normalmodus: L1 = links vorwärts, R1 = rechts vorwärts ---
-void sendTracksNormal(ControllerPtr ctl) {
-  int leftSpeed  = ctl->l1() ? 255 : 0;
-  int rightSpeed = ctl->r1() ? 255 : 0;
-  sendTrackSide(2, 1, 3, leftSpeed,  lastTrackLCmd, lastTrackLSpeed);
-  sendTrackSide(5, 4, 6, rightSpeed, lastTrackRCmd, lastTrackRSpeed);
-}
-
-// --- Tracks im Joystick-Modus: rechter Stick = Panzersteuerung ---
 void sendTracksJoystick(int axisRX, int axisRY) {
   int fwd  = -axisRY;
   int turn =  axisRX;
@@ -307,7 +387,6 @@ void sendTracksJoystick(int axisRX, int axisRY) {
   sendTrackSide(5, 4, 6, rightPwm, lastTrackRCmd, lastTrackRSpeed);
 }
 
-// --- Licht ---
 void processLights(ControllerPtr ctl) {
   if ((millis() - lightSwitchTime) > 200) {
     if (ctl->thumbR() == 1) {
@@ -324,7 +403,6 @@ void processLights(ControllerPtr ctl) {
   }
 }
 
-// --- Servos via D-Pad ---
 void processServos(ControllerPtr ctl) {
   uint8_t dpad = ctl->dpad();
   moveClawServoUp   = (dpad & DPAD_UP);
@@ -369,11 +447,17 @@ void processServos(ControllerPtr ctl) {
 #if DEBUG_AXES
 void debugAxes(ControllerPtr ctl) {
   static uint32_t lastDbg = 0;
-  if (millis() - lastDbg > 1000) {
-    Serial.printf("DBG X=%4d Y=%4d RX=%4d RY=%4d | A=%d B=%d X=%d Y=%d | L1=%d L2=%d R1=%d R2=%d dpad=%d mode=%s\n",
+  if (millis() - lastDbg > 500) {
+    int thumbShow = thumbRampActive
+                  ? computeRampPwm(thumbRampStart, 0, 0, RAMP_START_PWM_THUMB)
+                  : 0;
+    int auxShow   = auxRampActive
+                  ? computeRampPwm(auxRampStart, KICK_DURATION_AUX_MS, KICK_PWM_AUX, RAMP_START_PWM_AUX)
+                  : 0;
+    Serial.printf("DBG X=%4d Y=%4d RX=%4d RY=%4d | L1=%d L2=%d R1=%d R2=%d | THUMB_PWM=%3d AUX_PWM=%3d | mode=%s\n",
                   ctl->axisX(), ctl->axisY(), ctl->axisRX(), ctl->axisRY(),
-                  ctl->a(), ctl->b(), ctl->x(), ctl->y(),
-                  ctl->l1(), ctl->l2(), ctl->r1(), ctl->r2(), ctl->dpad(),
+                  ctl->l1(), ctl->l2(), ctl->r1(), ctl->r2(),
+                  thumbShow, auxShow,
                   joyTrackMode ? "JOY" : "NRM");
     lastDbg = millis();
   }
@@ -385,19 +469,14 @@ void processGamepad(ControllerPtr ctl) {
   debugAxes(ctl);
 #endif
 
-  // Modus-Umschaltung per Kreuz-Doppelklick (ctl->a())
   checkModeToggle(ctl);
 
-  // Lokale Motoren an ESP1 (immer aktiv)
   processPivot(ctl->axisX());
-  processBoom(ctl->axisRY());
   processThumbAndAuxAttach(ctl);
-
-  // Dipper immer über linken Stick Y
   sendDipper(ctl->axisY());
 
   if (joyTrackMode) {
-    // Joystick-Modus: rechter Stick steuert Ketten, TiltAttach pausiert
+    stopBoom();
     sendTracksJoystick(ctl->axisRX(), ctl->axisRY());
     if (lastTiltCmd != 12) {
       Serial.println("12");
@@ -405,9 +484,8 @@ void processGamepad(ControllerPtr ctl) {
       lastTiltSpeed = 0;
     }
   } else {
-    // Normalmodus: rechter Stick X = TiltAttach, L1/R1 = Tracks vorwärts
+    processBoom(ctl->axisRY());
     sendTiltAttach(ctl->axisRX());
-    sendTracksNormal(ctl);
   }
 
   processLights(ctl);
@@ -416,6 +494,8 @@ void processGamepad(ControllerPtr ctl) {
 
 void setup() {
   Serial.begin(115200);
+
+  Serial.printf("\n===== %s booting =====\n", FW_VERSION);
 
   ESP32PWM::allocateTimer(0);
   ESP32PWM::allocateTimer(1);
@@ -446,10 +526,11 @@ void setup() {
   clawServo.write(clawServoValue);
   auxServo.write(auxServoValue);
 
-  Serial.printf("Firmware: %s\n", BP32.firmwareVersion());
+  Serial.printf("Bluepad32 Firmware: %s\n", BP32.firmwareVersion());
   const uint8_t *addr = BP32.localBdAddress();
   Serial.printf("BD Addr: %2X:%2X:%2X:%2X:%2X:%2X\n",
                 addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]);
+  Serial.printf("FW: %s | Modus: NORMAL\n", FW_VERSION);
 
   BP32.setup(&onConnectedController, &onDisconnectedController);
   BP32.forgetBluetoothKeys();
