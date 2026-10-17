@@ -1,7 +1,6 @@
 // ESP2_1-24_Motor_Slave_S3SuperMini.txt
 // ESP32-S3 SuperMini - Motor-Slave für Bagger 1:24
-// Steuert: LeftTrack, RightTrack, Dipper, TiltAttach über 4x DRV8833
-// Bekommt Befehle von ESP1 über Serial (UART)
+// FW_VERSION: ESP32.2.V01
 //
 // Protokoll (von ESP1):
 //   1,vel   LeftTrack rückwärts   2,vel  LeftTrack vorwärts   3  LeftTrack stop
@@ -11,29 +10,27 @@
 
 #include <Arduino.h>
 
+// ===== VERSION =====
+#define FW_VERSION "ESP32.2.V01"
+
 // Pin-Mapping für ESP32-S3 SuperMini
-// Tracks (DRV3)
-#define LEFT_TRACK0   1   // PIN1  -> DRV3-A IN1 Linker Kettenantrieb
-#define LEFT_TRACK1   2   // PIN2  -> DRV3-A IN2 Linker Kettenantrieb
-#define RIGHT_TRACK0  3   // PIN3  -> DRV3-B IN1 Rechter Kettenantrieb
-#define RIGHT_TRACK1  4   // PIN4  -> DRV3-B IN2 Rechter Kettenantrieb
+#define LEFT_TRACK0   1
+#define LEFT_TRACK1   2
+#define RIGHT_TRACK0  3
+#define RIGHT_TRACK1  4
 
-// Dipper + TiltAttach (DRV4)
-#define DIPPER0       5   // PIN5  -> DRV4-A IN1 Löffelstiel auf
-#define DIPPER1       6   // PIN6  -> DRV4-A IN2 Löffelstiel ab
-#define TILT0         7   // PIN7  -> DRV4-B IN1 Schwenklöffel
-#define TILT1         8   // PIN8  -> DRV4-B IN2 Schwenklöffel
+#define DIPPER0       5
+#define DIPPER1       6
+#define TILT0         7
+#define TILT1         8
 
-// Optionale Aux-Motoren
 #define AUX_MOTOR0    9
 #define AUX_MOTOR1    10
 #define AUX_MOTOR2    11
 #define AUX_MOTOR3    12
 
-// Status-LED
 #define STATUS_LED    48
 
-// PWM-Kanäle (LEDC) - S3 hat 8 Kanäle (0..7), alle hier belegt
 #define PWM_FREQ      20000
 #define PWM_RES       8
 
@@ -51,7 +48,8 @@ String receivedDataStr = "";
 void setup() {
   Serial.begin(115200);
 
-  // PWM-Setup für alle Motor-Pins
+  Serial.printf("\n===== %s booting =====\n", FW_VERSION);
+
   ledcSetup(CH_LT0,   PWM_FREQ, PWM_RES); ledcAttachPin(LEFT_TRACK0,  CH_LT0);
   ledcSetup(CH_LT1,   PWM_FREQ, PWM_RES); ledcAttachPin(LEFT_TRACK1,  CH_LT1);
   ledcSetup(CH_RT0,   PWM_FREQ, PWM_RES); ledcAttachPin(RIGHT_TRACK0, CH_RT0);
@@ -61,13 +59,11 @@ void setup() {
   ledcSetup(CH_TILT0, PWM_FREQ, PWM_RES); ledcAttachPin(TILT0,        CH_TILT0);
   ledcSetup(CH_TILT1, PWM_FREQ, PWM_RES); ledcAttachPin(TILT1,        CH_TILT1);
 
-  // Alle Kanäle aus
   ledcWrite(CH_LT0, 0);   ledcWrite(CH_LT1, 0);
   ledcWrite(CH_RT0, 0);   ledcWrite(CH_RT1, 0);
   ledcWrite(CH_DIP0, 0);  ledcWrite(CH_DIP1, 0);
   ledcWrite(CH_TILT0, 0); ledcWrite(CH_TILT1, 0);
 
-  // Aux-Pins digital (nur Reserve)
   pinMode(AUX_MOTOR0, OUTPUT);
   pinMode(AUX_MOTOR1, OUTPUT);
   pinMode(AUX_MOTOR2, OUTPUT);
@@ -80,10 +76,9 @@ void setup() {
   pinMode(STATUS_LED, OUTPUT);
   digitalWrite(STATUS_LED, LOW);
 
-  Serial.println("ESP2 ready");
+  Serial.printf("FW: %s | bereit\n", FW_VERSION);
 }
 
-// Motor über zwei PWM-Kanäle mit Vorzeichen steuern
 void setMotorPwm(int chFwd, int chRev, int signedSpeed) {
   if (signedSpeed == 0) {
     ledcWrite(chFwd, 0);
@@ -114,33 +109,27 @@ void loop() {
     int commaIndex = receivedDataStr.indexOf(',');
 
     if (commaIndex != -1) {
-      // Format "mtr,velocity"
       int mtr = receivedDataStr.substring(0, commaIndex).toInt();
       int velocity = receivedDataStr.substring(commaIndex + 1).toInt();
 
       switch (mtr) {
-        // LeftTrack
-        case 2: setMotorPwm(CH_LT0, CH_LT1,  velocity); break;   // vorwärts
-        case 1: setMotorPwm(CH_LT0, CH_LT1, -velocity); break;   // rückwärts
-        // RightTrack
-        case 5: setMotorPwm(CH_RT0, CH_RT1,  velocity); break;   // vorwärts
-        case 4: setMotorPwm(CH_RT0, CH_RT1, -velocity); break;   // rückwärts
-        // Dipper
-        case 7: setMotorPwm(CH_DIP0, CH_DIP1,  velocity); break; // up
-        case 8: setMotorPwm(CH_DIP0, CH_DIP1, -velocity); break; // down
-        // TiltAttach
+        case 2: setMotorPwm(CH_LT0, CH_LT1,  velocity); break;
+        case 1: setMotorPwm(CH_LT0, CH_LT1, -velocity); break;
+        case 5: setMotorPwm(CH_RT0, CH_RT1,  velocity); break;
+        case 4: setMotorPwm(CH_RT0, CH_RT1, -velocity); break;
+        case 7: setMotorPwm(CH_DIP0, CH_DIP1,  velocity); break;
+        case 8: setMotorPwm(CH_DIP0, CH_DIP1, -velocity); break;
         case 10: setMotorPwm(CH_TILT0, CH_TILT1,  velocity); break;
         case 11: setMotorPwm(CH_TILT0, CH_TILT1, -velocity); break;
         default: break;
       }
     } else {
-      // Format "mtr" (Stop)
       int mtr = receivedDataStr.toInt();
       switch (mtr) {
-        case 3:  setMotorPwm(CH_LT0,   CH_LT1,   0); break;  // LeftTrack stop
-        case 6:  setMotorPwm(CH_RT0,   CH_RT1,   0); break;  // RightTrack stop
-        case 9:  setMotorPwm(CH_DIP0,  CH_DIP1,  0); break;  // Dipper stop
-        case 12: setMotorPwm(CH_TILT0, CH_TILT1, 0); break;  // TiltAttach stop
+        case 3:  setMotorPwm(CH_LT0,   CH_LT1,   0); break;
+        case 6:  setMotorPwm(CH_RT0,   CH_RT1,   0); break;
+        case 9:  setMotorPwm(CH_DIP0,  CH_DIP1,  0); break;
+        case 12: setMotorPwm(CH_TILT0, CH_TILT1, 0); break;
         default: break;
       }
     }
