@@ -27,7 +27,7 @@ Instead of a scattered folder structure, all necessary project files are include
 
 ### 📐 3D Printable Files (STLs)
 The modified 3D files to fit the extra electronics can be found directly on the official Printables Remix page:
-🔗 **[Printables Remix - DIY RC Excavator](https://printables.com/remixes)**
+🔗 **[Printables Remix - DIY RC Excavator]([https://printables.com/remixes)](https://www.printables.com/model/1881578-rc-excavator-proportional-control-alternative-pcb)**
 
 ---
 
