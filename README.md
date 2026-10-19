@@ -8,7 +8,7 @@ This upgrade completely eliminates the need for the MCP23017, increases motor pe
 
 🚀 Key Improvements
 - **Dual-MCU Architecture (No MCP23017 needed):** I added a cheap ESP32-S3 Super Mini directly underneath the main ESP32 Dev Board. They communicate via high-speed TX/RX (UART). The second ESP32 dedicatedly generates independent PWM signals to control 8 motors with full forward/reverse functionality.
-- **Higher Voltage for Speed & Power:** Raised the system battery voltage to 9V (using 3 battery cells). This higher voltage directly increases motor RPM and torque. Because the motors spin faster, the excavator's overall movements look significantly smoother, more agile, and more responsive.
+- **Higher Voltage for Speed:** Raised the system battery voltage to 9V (using 3 battery cells). This higher voltage directly increases motor RPM and torque. Because the motors spin faster, the excavator's overall movements look significantly smoother, more agile, and more responsive.
 - **Optimized Motor Drivers:** Swapped standard drivers for red DRV8833 modules. Note that both standard and red boards use the identical Texas Instruments chip (rated up to 10.8V). However, the red modules are used here to ensure stable operation under the higher 9V load.
 
 📂 Repository Content & Files
