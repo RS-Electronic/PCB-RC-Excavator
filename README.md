@@ -14,9 +14,10 @@ This upgrade completely eliminates the need for the MCP23017, increases motor pe
 📂 Repository Content & Files
 Instead of a scattered folder structure, all necessary project files are included directly in this repository:
 
-📜 Mini_Excavator_Esp1.1.ino – Firmware for the primary ESP32 (Receiver / Main Logic).
-📜 Mini_Excavator_Esp2.1.ino – Firmware for the ESP32-S3 Super Mini (PWM / Motor Coprocessor).
-📦 PCB-RC-Excavator-main.zip – Complete Gerber files to manufacture your own custom PCB for this dual-ESP32 setup.
+- 📄 **RC Excavator_DE_EN.pdf** – Complete wiring, control schematic, and documentation (in German & English).
+- 📜 **Mini_Excavator_Esp1.1.ino** – Firmware for the primary ESP32 (Receiver / Main Logic).
+- 📜 **Mini_Excavator_Esp2.1.ino** – Firmware for the ESP32-S3 Super Mini (PWM / Motor Coprocessor).
+- 📦 **PCB-RC-Excavator-main.zip** – Complete Gerber files to manufacture your own custom PCB for this dual-ESP32 setup.
 
 📐 3D Printable Files (STLs)
 The modified 3D files to fit the extra electronics can be found directly on the official Printables Remix page: 🔗 [Printables Remix - DIY RC Excavator]([https://printables.com](https://www.printables.com/model/1881578-rc-excavator-proportional-control-alternative-pcb)
