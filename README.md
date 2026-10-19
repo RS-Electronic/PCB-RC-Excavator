@@ -19,7 +19,7 @@ Instead of a scattered folder structure, all necessary project files are include
 📦 PCB-RC-Excavator-main.zip – Complete Gerber files to manufacture your own custom PCB for this dual-ESP32 setup.
 
 📐 3D Printable Files (STLs)
-The modified 3D files to fit the extra electronics can be found directly on the official Printables Remix page: 🔗 [Printables Remix - DIY RC Excavator]([https://printables.com](https://www.printables.com/model/1881578-rc-excavator-proportional-control-alternative-pcb))
+The modified 3D files to fit the extra electronics can be found directly on the official Printables Remix page: 🔗 [Printables Remix - DIY RC Excavator]([https://printables.com](https://www.printables.com/model/1881578-rc-excavator-proportional-control-alternative-pcb)
 
 🛠️ Hardware Requirements
 - 1x ESP32 Dev Board (Main Controller)
