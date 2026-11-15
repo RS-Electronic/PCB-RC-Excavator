@@ -31,7 +31,7 @@ The modified 3D files to fit the extra electronics can be found directly on the 
 ☕ Support this Project
 Developing the dual-MCU communication, designing the custom PCB, and fine-tuning the 9V power delivery took a significant amount of time, testing, and reverse engineering. If this upgrade saves you money on expensive chips or makes your RC excavator build experience better, I would highly appreciate a small tip!
 
-[Support me on Ko-fi](https://ko-fi.com)
+[Support me on Ko-fi](https://ko-fi.com/rselectronic)
 
 License & Credits
 Original Concept by ProfessorBoots. This modification is shared for community improvement.
